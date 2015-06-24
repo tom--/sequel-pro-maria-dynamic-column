@@ -10,14 +10,14 @@ then you may find this useful.
 ### Install
 
 - Download [Maria Dynamic Column.spBundle](https://raw.githubusercontent.com/tom--/sequel-pro-maria-dynamic-column/master/Bundles/Maria%20Dynamic%20Column.spBundle/command.plist)
-- Save it in `~/Library/Application Support/Sequel Pro/Bundles/`
+- Save it in `~/Library/Application Support/Sequel Pro/Bundles/`  
 (In the Finder: ⌘G and enter `~/Library` Navigate from there.)
 
 ### Use
 
 Select a row in a table that has a dynamic column blob and run the bundle:
 
-- "Bundles" menu → "Data Table" → "Maria Dynamic Column"
+- "Bundles" menu → "Data Table" → "Maria Dynamic Column" 
 - *or* shortcut key ⌃\ (control-backslash) which you can change by
 [hacking](#hack) in the bundle editor.
 
