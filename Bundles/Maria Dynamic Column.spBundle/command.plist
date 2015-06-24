@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>category</key>
+	<string></string>
+	<key>command</key>
+	<string>#!/usr/bin/env php
+&lt;!doctype html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;meta charset="utf-8"&gt;
+    &lt;title&gt;Maria Dynamic Column JSON display&lt;/title&gt;
+    &lt;meta name="description" content="Displays a Maria Dynamic Column blob decoded to JSON"&gt;
+    &lt;style&gt;
+        code {
+            font-family: Consolas, Menlo, "Liberation Mono", Courier, monospace;
+            font-size: 100%;
+            white-space: pre-wrap;
+        }
+        .json span.nm {color: #00a;}
+        .json span.ky {color: #090;}
+        .json span.st {color: #60a;}
+        .json span.bo {color: #09b;}
+        .json span.nl {color: #c00;}
+    &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;pre&gt;&lt;?php
+    ini_set('display_errors', 1);
+
+    /**
+     * Attempt to read a Maria Dynamic Column value as a JSON document.
+     *
+     * @param array $pk PK of the row in question in the form [columnName =&gt; value, ...]
+     * @param string $blobCol Name of the BLOB column to decode
+     *
+     * @return bool|string The BLOB's decoded JSON string or false on failure
+     */
+    function jsonValue($pk, $blobCol)
+    {
+        $from = "FROM `{$_ENV['SP_SELECTED_DATABASE']}`.`{$_ENV['SP_SELECTED_TABLE']}`";
+
+        $where = [];
+        foreach ($pk as $col =&gt; $val) {
+            $where[] = "`$col` = " . var_export($val, true);
+        }
+        $where = "WHERE " . implode(' AND ', $where);
+
+        if (runQuery("SELECT COLUMN_CHECK(`$blobCol`) $from $where") === '1') {
+            $json = runQuery("SELECT COLUMN_JSON(`$blobCol`) $from $where");
+            $json = strtr($json, ["\n" =&gt; '\\n', "\r" =&gt; '\\r', "\t" =&gt; '\\t', "\f" =&gt; '\\f', "\x08" =&gt; '\\b']);
+            return $json;
+        };
+
+        return false;
+    }
+
+    /**
+     * Run a query using the amazing Sequel Pro dropfile protocol.
+     *
+     * @param $query
+     * @param bool $debug
+     *
+     * @return bool|string
+     */
+    function runQuery($query, $debug = false)
+    {
+        // Files "it is a good programming bahavior" to delete unnecessarily.
+        $deleteThese = [
+            $queryFile = $_ENV['SP_QUERY_FILE'],
+            $resultFile = $_ENV['SP_QUERY_RESULT_FILE'],
+            $statusFile = $_ENV['SP_QUERY_RESULT_STATUS_FILE'],
+            $statusFile = $_ENV['SP_QUERY_RESULT_META_FILE'],
+        ];
+        foreach ($deleteThese as $file) {
+            @unlink($file);
+        }
+
+        // Write the query to its dropfile.
+        file_put_contents($queryFile, $query);
+
+        // Send a request to Sequel Pro to run the query.
+        exec("open sequelpro://{$_ENV['SP_PROCESS_ID']}@passToDoc/ExecuteQuery/");
+
+        // Wait up to 2 seconds for Sequel Pro to finish and write the status file.
+        $n = 0;
+        do {
+            usleep(100000);
+            $n += 1;
+            $status = @file_get_contents($statusFile);
+        } while ($status === false &amp;&amp; $n &lt; 20);
+
+        // On failure, Sequel Pro provides no details about it so simply return false.
+        if ($status === '1') {
+            return false;
+        }
+
+        // Read the result file and dispose of the headers row.
+        $result = file_get_contents($resultFile);
+        $result = trim(substr($result, strpos($result, "\n")));
+
+        if ($debug) {
+            echo "&gt;&gt;&gt; query was: $query\n\n";
+            echo "&gt;&gt;&gt; result: " . var_export($result, true) . "\n\n";
+        }
+
+        // Practice good programming bahavior every day.
+        foreach ($deleteThese as $file) {
+            @unlink($file);
+        }
+
+        return $result;
+    }
+
+    // Display any fatal error as a text tooltip and quit.
+    function fatal($msg)
+    {
+        echo "$msg";
+        exit(205);
+    }
+
+    // Open the input metadata file.
+    $metaFile = $_ENV['SP_BUNDLE_INPUT_TABLE_METADATA'];
+    $file = fopen($metaFile, 'r');
+
+    // Search metadata for the PK columns.
+    $pkPos = [];
+    $n = 0;
+    while (!feof($file)) {
+        $fields = @fgets($file);
+        if ($fields === false) {
+            break;
+        }
+
+        $fields = explode("\t", $fields);
+        if ($fields[5] === '1') {
+            $pkPos[] = $n;
+        }
+
+        $n += 1;
+    }
+    if (empty($pkPos)) {
+        // This script depends on a PK.
+        fatal('cannot file pk');
+    }
+
+    // Read from the input the column names and the fields from the first data row.
+    $inputFile = $_ENV['SP_BUNDLE_INPUT'];
+    $file = fopen($inputFile, 'r');
+    $headings = @fgets($file);
+    $fields = @fgets($file);
+    if (!$headings || !$fields) {
+        fatal('bundle input error. select a row');
+    }
+    $headings = explode("\t", trim($headings));
+    $fields = explode("\t", trim($fields));
+
+    // Form the PK of the data row as an array [colName =&gt; value, ...].
+    $pk = [];
+    foreach ($pkPos as $pos) {
+        $pk[$headings[$pos]] = $fields[$pos];
+    }
+
+    // Search the fields for the first 'BLOB' that successfully decodes as a
+    // Maria Dynamic Column.
+    $json = false;
+    $pos = false;
+    foreach ($fields as $pos =&gt; $value) {
+        if ($value === 'BLOB') {
+            $json = jsonValue($pk, $headings[$pos]);
+            if ($json !== false) {
+                break;
+            }
+        }
+    }
+    if ($json === false) {
+        fatal('could not decode a dyn col blob');
+    }
+
+    // Finished processing. Now display the JSON formatted and colored.
+    ?&gt;&lt;/pre&gt;
+
+&lt;p&gt;SELECT &lt;?= $headings[$pos] ?&gt;
+    FROM &lt;?= $_ENV['SP_SELECTED_TABLE'] ?&gt;
+    WHERE &lt;?php var_export($pk) ?&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="json"&gt;&lt;/code&gt;&lt;/pre&gt;
+
+&lt;script&gt;
+    var colorJson = function (json, indent) {
+        var re;
+        if (indent === undefined) {
+            indent = 2;
+        }
+        if (typeof json !== 'string') {
+            json = JSON.stringify(json, null, indent);
+        }
+        re = '("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\\s*:)?';
+        re += '|\\b(true|false|null)\\b';
+        re += '|-?\\d+(?:\\.\\d*)?(?:[eE][+\\-]?\\d+)?)';
+        re = new RegExp(re, 'g');
+        return json
+        .replace(/&amp;/g, '&amp;amp;').replace(/&lt;/g, '&amp;lt;')
+        .replace(/&gt;/g, '&amp;gt;')
+        .replace(re, function (match) {
+            var cls = 'nm';
+            if (/^"/.test(match)) {
+                cls = /:$/.test(match) ? 'ky' : 'st';
+            } else if (/true|false/.test(match)) {
+                cls = 'bo';
+            } else if (/null/.test(match)) {
+                cls = 'nl';
+            }
+            return '&lt;span class="' + cls + '"&gt;' + match + '&lt;/span&gt;';
+        });
+    };
+
+    document.querySelector('.json').innerHTML = colorJson(&lt;?= $json ?&gt;);
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;&lt;?php exit(205);
+</string>
+	<key>input</key>
+	<string>selectedtablerowsastab</string>
+	<key>internalKeyEquivalent</key>
+	<dict>
+		<key>characters</key>
+		<string>\</string>
+		<key>keyCode</key>
+		<integer>42</integer>
+		<key>modifierFlags</key>
+		<integer>262144</integer>
+	</dict>
+	<key>keyEquivalent</key>
+	<string>^\</string>
+	<key>name</key>
+	<string>Maria Dynamic Column</string>
+	<key>output</key>
+	<string>none</string>
+	<key>scope</key>
+	<string>datatable</string>
+	<key>tooltip</key>
+	<string>Displays a Maria Dynamic Column blob as JSON</string>
+	<key>trigger</key>
+	<string>none</string>
+	<key>uuid</key>
+	<string>E77040AD-DD2E-43D1-8768-7EB7A208B408</string>
+	<key>withblob</key>
+	<string>exclude</string>
+</dict>
+</plist>
