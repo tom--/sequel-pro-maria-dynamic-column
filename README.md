@@ -18,7 +18,7 @@ then you may find this useful.
 Select a row in a table that has a dynamic column blob and run the bundle:
 
 - "Bundles" menu → "Data Table" → "Maria Dynamic Column" 
-- *or* shortcut key ⌃\ (control-backslash) which you can change by
+- *or* shortcut key ⌃\ (control-backslash), which you can change by
 [hacking](#hack) in the bundle editor.
 
 That's all.
