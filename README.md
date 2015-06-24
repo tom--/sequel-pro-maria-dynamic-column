@@ -9,7 +9,7 @@ then you may find this useful.
 
 ### Install
 
-- Download Maria Dynamic Column.spBundle
+- Download [Maria Dynamic Column.spBundle](https://raw.githubusercontent.com/tom--/sequel-pro-maria-dynamic-column/master/Bundles/Maria%20Dynamic%20Column.spBundle/command.plist)
 - Save it in `~/Library/Application Support/Sequel Pro/Bundles/`
 (In the Finder: ⌘G and enter `~/Library` Navigate from there.)
 
