@@ -5,6 +5,10 @@ If you use [Dynamic Columns](https://mariadb.com/kb/en/mariadb/dynamic-columns/)
 and the [Sequel Pro](http://sequelpro.com/) MySQL management tool
 then you may find this useful.
 
+Dynamic Columns in MariaDB is like having a NoSQL 
+document attached to every row of a MySQL table. It can solve the kind of problem 
+that might otherwise lead you into committing a crime like EAV.
+
 ![Screen shot of Sequel Pro with Maria Dynamic Column displayed as JSON](Screenshot.png)
 
 ### Install
